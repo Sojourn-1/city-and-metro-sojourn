@@ -3402,6 +3402,12 @@
         if (!la.size || !lb.size) continue;
         let share = false; la.forEach(function (l) { if (lb.has(l)) share = true; });
         if (share) continue;
+        // 玩家指定「不换乘」的两站不画换乘虚线，也不按换乘站标示（v2.10 社区版）
+        const lk = (C.net.links || []).find(function (q) {
+          const qa = C.sIndex.get(q.a), qb = C.sIndex.get(q.b);
+          return (qa === ia && qb === ib) || (qa === ib && qb === ia);
+        });
+        if (lk && lk.kind === 'none') continue;
         xfer.add(ia); xfer.add(ib); xLinks.push([ia, ib]);
       }
     }

@@ -204,7 +204,7 @@
       Object.assign(at(31.5909, 120.3018), { id: 'wx_station', name: '无锡站', w: 620, d: 260, year: 1906, kind: 'rail' }),
       Object.assign(at(31.5989, 120.4554), { id: 'wx_east', name: '无锡东站', w: 700, d: 380, rot: 20, year: 2010, kind: 'rail' }),
       Object.assign(at(31.4854, 120.2655), { id: 'wx_jiangnan', name: '江南大学', w: 1300, d: 900, rot: 10, year: 1958, kind: 'campus' }),
-      Object.assign(at(31.5570, 120.3035), { id: 'wx_museum', name: '无锡博物院', w: 300, d: 220, year: 2008, kind: 'box' }),
+      Object.assign(at(31.5515, 120.3016), { id: 'wx_museum', name: '无锡博物院', w: 300, d: 220, year: 2008, kind: 'box' }),
       Object.assign(at(31.5530, 120.3010), { id: 'wx_taihusq', name: '太湖广场', w: 400, d: 380, year: 2000, kind: 'open' }),
       Object.assign(at(31.4930, 120.3077), { id: 'wx_civic', name: '无锡市民中心', w: 340, d: 240, year: 2010, kind: 'hall' }),
       Object.assign(at(31.5171, 120.2746), { id: 'wx_grand', name: '无锡大剧院', w: 300, d: 200, year: 2012, kind: 'opera', h: 40 }),
