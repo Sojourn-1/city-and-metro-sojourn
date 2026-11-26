@@ -4,9 +4,9 @@
 
 《城市与地铁》是一款在浏览器中游玩的单人地铁规划与城市经营游戏。从第一座车站开始，连接住区、商圈、校园与机场，跨过江河，逐步织出自己的交通网络。城市随年代发展，居民也会根据你的路网重新选择出行方式。
 
-[在线游玩](https://city-and-metro-sojourn.pages.dev) · [源码仓库](https://github.com/Sojourn-1/city-and-metro-sojourn) · [使用许可](./LICENSE.txt)
+[在线游玩](https://city-and-metro-sojourn.pages.dev) · [源码仓库](https://github.com/Sojourn-1/city-and-metro-sojourn) · [原版仓库](https://github.com/VinsonFung/city-and-metro) · [使用许可](./LICENSE.txt)
 
-> **社区版 1.0（by MetroSojourn）**：在原版 3.0 的基础上新增**无锡、苏州、常州**三张大市地图（开局 2010 / 2010 / 2015），并加入同名/异名换乘、站内/出站换乘与升级、预留站、片区分期开放等功能。原版网站：https://city-and-metro.pages.dev；本社区版：https://city-and-metro-sojourn.pages.dev。
+> **社区版 1.0（by MetroSojourn）**：在原版 3.0 的基础上新增**无锡、苏州、常州**三张大市地图（开局 2010 / 2010 / 2015），并加入同名/异名换乘、站内/出站换乘与升级、预留站、片区分期开放等功能。原版网站：https://city-and-metro.pages.dev；原版仓库：https://github.com/VinsonFung/city-and-metro；本社区版：https://city-and-metro-sojourn.pages.dev。
 
 ## V1.0 社区版 1.0：无锡、苏州与常州
 
