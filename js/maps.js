@@ -1,0 +1,508 @@
+'use strict';
+// 地图：广州（真实地理）与新手教程「青湾」（虚构小城）。
+// 各模块在加载时引用同一个 CM.DATA 对象，切换地图时替换它的内容，同时替换 CM.GEO（地理数据源）与网格尺寸、起始日期、人口曲线等参数。
+(function (CM) {
+  const CFG = CM.CFG, U = CM.U;
+  // 随地图切换的配置项：格网、起始日期、人口增长、货币与价格基年、建设与运营成本、票价、财政、城市经济、出行选择与道路参数
+  const CFG_KEYS = ['W', 'H', 'ZONE', 'START', 'growth', 'money', 'econBase', 'cost', 'ops', 'fareDefault', 'fareRange', 'economy', 'macro', 'choice', 'road', 'workWeek'];
+  const GZ_CFG = {}; for (const k of CFG_KEYS) GZ_CFG[k] = k === 'START' ? Object.assign({}, CFG.START) : CFG[k];
+  // 广州图内人口与岗位按独立版校准；其他地图与青湾使用各自的增长曲线。
+  GZ_CFG.growth = Object.assign({}, GZ_CFG.growth, {
+    popCurve: [[1990, 4.1e6], [1995, 5.0e6], [2000, 6.9e6], [2005, 8.4e6], [2010, 10.3e6], [2015, 12.0e6], [2020, 14.0e6], [2030, 15.4e6], [2045, 16.3e6], [2070, 16.9e6], [2300, 17.3e6]],
+    jobsRatio: [[1990, 0.5], [2000, 0.55], [2010, 0.59], [2020, 0.62], [2030, 0.63]],
+  });
+  // 出行选择参数按「发展阶段对应年份」平移并按本城货币缩放：devOffset 为广州曲线年份减本城年份，money 为本城货币相对广州曲线的倍数
+  const shift = function (curve, off, k) { return curve.map(function (p) { return [p[0] - off, p[1] * (k || 1)]; }); };
+  CM.deriveChoice = function (off, money) {
+    const ch = GZ_CFG.choice;
+    return {
+      choice: Object.assign({}, ch, { vot: shift(ch.vot, off, money), carCostPerKm: shift(ch.carCostPerKm, off, money), parking: shift(ch.parking, off, money), occupancy: shift(ch.occupancy, off), hoRate: shift(ch.hoRate, off), workerRate: shift(ch.workerRate, off), distDecayHW: shift(ch.distDecayHW, off), distDecayHO: shift(ch.distDecayHO, off),
+        purposeShare: { sc: shift(ch.purposeShare.sc, off), md: shift(ch.purposeShare.md, off), lz: shift(ch.purposeShare.lz, off) } }),
+      road: Object.assign({}, GZ_CFG.road, { capGrowth: shift(GZ_CFG.road.capGrowth, off) }),
+    };
+  };
+  const MAPS = {
+    gz: {
+      id: 'gz', name: '广州', title: '广州 · 1990', sub: '真实地理 · 1990 年起 · 人民币',
+      desc: '从 1990 年尚无地铁的广州开始：珠江水系、道路与桥梁、街道边界和地标都来自真实地理，区域按历史年份逐步开放，并有参考广州地铁发展的历史任务。',
+      facts: [['范围', '38 km × 57 km'], ['起始', '1990 年'], ['人口', '约 410 万'], ['货币', '人民币（元）'], ['模式', '经营挑战 / 自由建造']],
+      // 第 2 版（v2.1）：向北扩大 16 格到同和、京溪，向南扩大 32 格到市桥与广州南站；
+      // 第 3 版（v2.9）：向北扩大 80 格到新白云机场与花都城区，向东扩大 32 格到知识城、永和与新塘西缘，向南扩大 4 格。旧存档载入时依次迁移（见 extentMigration）
+      modes: ['challenge', 'free'], kind: 'real', mapVersion: 3, scenario: 'gz-1990',
+      extent: [{ from: 1, dx: 0, dy: 16, oldW: 120, oldH: 96, newW: 120, newH: 144, note: '地图向北扩大到同和、京溪，向南扩大到市桥与广州南站',
+        oldRegionIds: ['bys', 'hls', 'airport', 'oldcity', 'cbd', 'tianhe_w', 'sanyuanli', 'fangcun', 'haizhu_n', 'huangpu', 'changzhou', 'kaifaqu', 'tianhe_e', 'haizhu_s', 'tianhe_n', 'baiyun_n', 'baiyun_w', 'tonghe', 'panyu_n', 'pazhou', 'guanzhou', 'longdong', 'tianhe_ne', 'unicity', 'luogang', 'foshan', 'panyu_e', 'outer'],
+        oldLandmarkIds: ['zsjnt', 'zhl', 'cjc', 'gxs', 'lrs', 'hss', 'wxg', 'sssx', 'sm', 'nyw', 'njs', 'lsly', 'hhg', 'yxst', 'hpjx', 'sysu', 'scut', 'jnu', 'thty', 'gzzhan', 'gzdz', 'tcity', 'citic', 'xhyyt', 'gdmsg', 'pzhz', 'bycc', 'gzt', 'ifc', 'opera', 'gdmus', 'gzlib', 'ctf'] },
+      { from: 2, dx: 0, dy: 80, oldW: 120, oldH: 144, newW: 152, newH: 228, eventInsert: { index: 12, count: 5 }, note: '地图向北扩大到新白云机场与花都城区，向东扩大到知识城、永和与新塘西缘',
+        oldRegionIds: ['bys', 'hls', 'airport', 'oldcity', 'cbd', 'tianhe_w', 'sanyuanli', 'fangcun', 'haizhu_n', 'huangpu', 'changzhou', 'kaifaqu', 'tianhe_e', 'haizhu_s', 'tianhe_n', 'baiyun_n', 'baiyun_w', 'tonghe', 'panyu_n', 'pazhou', 'guanzhou', 'longdong', 'tianhe_ne', 'unicity', 'luogang', 'foshan', 'panyu_e', 'outer'],
+        oldLandmarkIds: ['zsjnt', 'zhl', 'cjc', 'gxs', 'lrs', 'hss', 'wxg', 'sssx', 'sm', 'nyw', 'njs', 'lsly', 'hhg', 'yxst', 'hpjx', 'sysu', 'scut', 'jnu', 'thty', 'gzzhan', 'gzdz', 'tcity', 'citic', 'xhyyt', 'gdmsg', 'pzhz', 'bycc', 'gzt', 'ifc', 'opera', 'gdmus', 'gzlib', 'ctf', 'gznz'] }],
+      // 地图选择页：地区、一句话特色、介绍、特色卡、大事年表、难度（1–4）
+      region: '中国内地', tagline: '珠江两岸，从第一条线开始', difficulty: 2, tags: ['无地铁开局', '越江', '新区开放'],
+      intro: '1990 年的广州还没有一公里地铁。老城的街巷挤满公交与自行车，天河才刚刚起步，珠江新城仍是一片农田。你要在老城与天河之间画下第一条线，再跟着城市一路向东、向南跨过珠江。',
+      features: [['bridge', '珠江越江', '珠江把城市分成两岸，越江段可以建隧道或桥梁'], ['map', '35 个片区逐年开放', '珠江新城、番禺、大学城、花都与知识城按真实年份开放，新白云机场在图内'], ['building', '33 处真实地标', '中山纪念堂、广州塔、东塔按落成年份出现'], ['flag', '7 项历史任务', '参考广州地铁的发展需求，不要求复刻真实线路']],
+      highlights: [[1993, '珠江新城开始规划'], [1996, '广州东站建成'], [2000, '番禺撤市设区'], [2004, '新白云机场与大学城启用'], [2010, '亚运会，广州塔落成']],
+      geo: CM.GEO, data: Object.assign({}, CM.DATA),
+      cfg: GZ_CFG,
+      cam: { cx: 30, cy: 137, zoom: 18 },   // v2.9 地图向北扩大 80 格，镜头仍对准老城
+    },
+  };
+  // 其他地图（教程与新增城市）由各自的数据文件登记为 CM.MAP_LIST；未写的配置项沿用广州样本
+  // 每格 250 m，所有地图的交通小区统一为 4×4 格。
+  for (const m of CM.MAP_LIST || []) {
+    const cfg = Object.assign({}, GZ_CFG);
+    if (m.econ) Object.assign(cfg, CM.deriveChoice(m.econ.devOffset || 0, m.econ.money || 1));
+    Object.assign(cfg, m.cfg);
+    // 超大型站（v2.7）：各图的造价与运营费表只写到大型，按大型的倍数补齐（造价约 1.6 倍、运营费约 1.7 倍）。
+    // 早期巴黎、伦敦的单价很小，这里保留有效数字而不是小数位，否则会被舍成 0
+    { const CS = cfg.cost && cfg.cost.station, OP = cfg.ops && cfg.ops.stationDaily;
+      if (CS) for (const t in CS) if (CS[t].XL == null) { const v = CS[t].L * 1.6; CS[t].XL = v >= 100 ? Math.round(v / 100) * 100 : +v.toPrecision(3); }
+      if (OP && OP.XL == null) OP.XL = +(OP.L * 1.7).toPrecision(3); }
+    // 城市经济：只在真实城市启用；没有专门参数的真实地图使用通用参数（'auto'），教程等虚构地图不启用
+    cfg.macro = m.kind === 'real' ? (m.cfg.macro || 'auto') : null;
+    m.cfg = cfg;
+    MAPS[m.id] = m;
+  }
+  // 默认命名、地名搜索和坐标对齐使用同一份清理后的地点。
+  const normalizePlaceNames = function (m) {
+    const corrections = m.data.stationNameCorrections || {};
+    const cleanName = function (name, kind) {
+      const key = kind + ":" + name;
+      if (Object.hasOwn(corrections, key)) return corrections[key];
+      if (Object.hasOwn(corrections, name)) return corrections[name];
+      const clean = name.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '').trim();
+      return /^\p{Nd}+$/u.test(clean) ? null : clean;
+    };
+    const normalize = function (places, repairs) {
+      return places.flatMap(function (p) {
+        const [name, x, y, kind] = p, clean = cleanName(name, kind);
+        if (clean === name) return [p];
+        if (repairs) {
+          if (!repairs.has(name)) repairs.set(name, []);
+          repairs.get(name).push([name, x, y, kind, clean]);
+        }
+        if (!clean) return [];
+        // 去掉编号或隐形字符后实为同一站时，使用已有的正式站点坐标。
+        if (places.some(function (q) { return kind <= 1 && q[0] === clean && q[3] === kind && U.dist(x, y, q[1], q[2]) < 0.6; })) return [];
+        return [[clean, x, y, kind]];
+      });
+    };
+    const places = m.data.places || [], labels = new Map(), corrected = normalize(places, labels);
+    if (labels.size) {
+      m.data.places = corrected;
+      m.data.stationNameRepair = { revision: 1, labels: labels };
+    }
+    if (m.geo.places) m.geo.places = m.geo.places === places ? m.data.places : normalize(m.geo.places);
+  };
+  for (const id in MAPS) if (MAPS[id].kind === 'real') normalizePlaceNames(MAPS[id]);
+  // 地图数据指纹：格网、要素数量与名称表；范围修订提高 mapVersion，原范围内的地形校正由 terrainRevision 识别。
+  for (const id in MAPS) {
+    const m = MAPS[id], G = m.geo;
+    m.mapVersion = m.mapVersion || 1;
+    const count = G.count || {};
+    m.fp = U.fnv([id, m.cfg.W, m.cfg.H, count.water ?? (G.water || []).length, count.roads ?? (G.roads || []).length, (G.names || []).length, (m.data.regions || []).map(function (r) { return r.id; }).join(',')].join('|'));
+  }
+  // 位置校正（v2.3 玩家反馈：杭州站位置错位）：部分手填坐标取自国内地图（GCJ-02 坐标系），比 OSM（WGS-84）偏东南 400–600 m。
+  // 铁路车站地标、铁路枢纽设施对齐 OSM 同名火车站（800 m 内）；任务与阶段目标的锚点对齐 OSM 同名地铁站（750 m 内）。
+  // 只按名称精确匹配，与 OSM 已经一致的不变；上海、武汉的数据文件此前已对设施与锚点做过同样的校正
+  (function () {
+    const strip = function (s) { return String(s).replace(/（.*?）/g, '').trim(); };
+    for (const id in MAPS) {
+      const m = MAPS[id]; if (m.kind !== 'real' || !m.geo || !m.geo.places) continue;
+      const byName = [new Map(), new Map()];
+      for (const p of m.geo.places) if (p[3] === 0 || p[3] === 1) { const t = byName[p[3]]; if (!t.has(p[0])) t.set(p[0], []); t.get(p[0]).push(p); }
+      const near = function (names, type, x, y, r) { let best = null; for (const n of names) for (const p of byName[type].get(n) || []) { const d = U.dist(p[1], p[2], x, y); if (d <= r && (!best || d < best.d)) best = { d: d, x: p[1], y: p[2] }; } return best; };
+      const railNames = function (s) { s = strip(s); return [s, s.replace(/火车站$|站$/, ''), s.replace(/站$/, '')]; };
+      for (const lm of m.data.landmarks || []) if (lm.kind === 'rail') { const b = near(railNames(lm.name), 1, lm.x, lm.y, 3.2); if (b && b.d > 0.4) { lm.x = b.x; lm.y = b.y; } }
+      for (const f of m.data.facilities || []) if (f.at && f.t === 'rail') { const b = near(railNames(f.n), 1, f.at[0], f.at[1], 3.6); if (b && b.d > 0.4) f.at = [b.x, b.y]; }
+      // v2.6.1 玩家反馈（任务地点标错）：半径放宽到 3 km，括号里写的地名也算（如「老城（公园前）」）
+      const inner = function (s) { const q = /（([^（）·、—]+)）/.exec(String(s)); return q ? [q[1].replace(/一带$/, '')] : []; };
+      const anchors = function (list) { for (const a of list || []) { const names = [strip(a.name), strip(a.name).replace(/一带$/, '')].concat(inner(a.name)), b = near(names, 0, a.x, a.y, 12) || near(railNames(a.name), 1, a.x, a.y, 12); if (b && b.d > 0.4) { a.x = b.x; a.y = b.y; } } };
+      for (const t of (m.data.histTasks || []).concat(m.data.dynTasks || [])) anchors(t.anchors);
+      for (const e of m.data.eras || []) for (const t of e.goals || []) anchors(t.anchors);
+    }
+  })();
+  // 城市特色机制（traits.js）：展开成底层字段。广州是开局默认地图，useMap 不会再切换，要同步到当前配置
+  for (const id in MAPS) if (CM.Traits) CM.Traits.compile(MAPS[id]);
+  Object.assign(CM.DATA, MAPS.gz.data);
+  for (const k of CFG_KEYS) if (k !== 'START') CFG[k] = MAPS.gz.cfg[k];
+  // 地图范围扩展的存档迁移（地图版本升级）：spec = { from, dx, dy, oldW, oldH, oldRegionIds, oldLandmarkIds, note }。
+  // dx / dy 为新格网中原地图左上角的位置（格，须为交通小区边长 4 的倍数，投影系数不变）。只改解析出的存档副本：
+  //  · 城市逐格数据放入新格网对应位置，新增范围标记为待生成（载入时按存档年份生成，见 City.fillNewCells）；
+  //  · 区域与地标状态改为按 id 对应（存档没有 id 时用旧版本的 id 列表补上）；
+  //  · 车站、轨道控制点、任务锚点平移；片区编号（动态任务与冷却记录）按新格网换算；
+  //  · 城市经济在载入后按新增范围的岗位比例调整统计口径（见 game.js），资金、债务、任务、历史记录保持不变。
+  // spec 也可以是按版本排列的数组（v2.2：香港第 2 版再向西扩大为第 3 版），旧存档依次迁移；每步的新格网尺寸为 newW / newH，缺省为当前地图尺寸
+  CM.extentMigration = function (specs) {
+    const ZN = CFG.ZONE, list = (Array.isArray(specs) ? specs : [specs]).slice().sort(function (a, b) { return a.from - b.from; });
+    for (const spec of list) if (spec.dx % ZN || spec.dy % ZN) throw new Error('地图扩展偏移须为交通小区边长的倍数');
+    return function (p, from) {
+      const steps = list.filter(function (s) { return s.from >= from; });
+      if (!steps.length || steps[0].from !== from) throw new Error('不支持从第 ' + from + ' 版迁移');
+      for (const spec of steps) migrateStep(p, spec, from);
+      return p;
+    };
+  };
+  function migrateStep(p, spec, from0) {
+    const ZN = CFG.ZONE, from = spec.from;
+    {
+      const m = MAPS[p.meta.map || 'gz'], W = spec.newW || m.cfg.W, H = spec.newH || m.cfg.H, oW = spec.oldW, oH = spec.oldH, dx = spec.dx, dy = spec.dy;
+      if (dx < 0 || dy < 0 || dx + oW > W || dy + oH > H) throw new Error('新旧格网尺寸不匹配');
+      const C = p.city;
+      // 逐格数据（前一步迁移留下的待生成标记一并平移）
+      const keys = ['pop', 'jobs', 'bh', 'taken', 'lu', 'street', 'urbanYear'];
+      const prevFill = C.fillNew ? U.unpackTyped(C.fillNew) : null;
+      for (const k of keys) {
+        const a = U.unpackTyped(C[k]);
+        if (a.length !== oW * oH) throw new Error('城市数据尺寸与第 ' + from + ' 版地图不符');
+        const b = new a.constructor(W * H);
+        for (let j = 0; j < oH; j++) b.set(a.subarray(j * oW, (j + 1) * oW), (j + dy) * W + dx);
+        C[k] = U.packTyped(b, C[k].t || (a instanceof Float32Array ? 'f32' : a instanceof Uint16Array ? 'u16' : 'u8'));
+      }
+      const fill = new Uint8Array(W * H).fill(1);
+      for (let j = 0; j < oH; j++) { if (prevFill && prevFill.length === oW * oH) fill.set(prevFill.subarray(j * oW, (j + 1) * oW), (j + dy) * W + dx); else fill.fill(0, (j + dy) * W + dx, (j + dy) * W + dx + oW); }
+      C.fillNew = U.packTyped(fill, 'u8');
+      if (!prevFill) {
+        C.fillYear = p.clock.y;
+        C.fillT = p.clock.y + ((p.clock.m || 1) - 1) / 12;
+      }
+      if (!C.regionIds) C.regionIds = spec.oldRegionIds;
+      if (!C.landmarkIds) C.landmarkIds = spec.oldLandmarkIds;
+      // 扩图新事件排在机制库生成的事件之前时，按旧序号迁移已结算事件和对应的纪事编号。
+      if (spec.eventInsert && (spec.eventInsert.beforeRules == null || (p.rulesRevision || 0) < spec.eventInsert.beforeRules)) {
+        const { index, count } = spec.eventInsert;
+        const shift = function (key) { return Number(key) >= index ? String(Number(key) + count) : key; };
+        const eventId = function (id) { return typeof id === 'string' ? id.replace(/^ev-(\d+)$/, function (_, key) { return 'ev-' + shift(key); }) : id; };
+        if (p.firedEvents) p.firedEvents = Object.fromEntries(Object.entries(p.firedEvents).map(function ([key, value]) { return [shift(key), value]; }));
+        if (p.milestones) {
+          if (p.milestones.done) p.milestones.done = Object.fromEntries(Object.entries(p.milestones.done).map(function ([key, value]) { return [eventId(key), value]; }));
+          for (const entry of p.milestones.list || []) entry.id = eventId(entry.id);
+        }
+      }
+      // 坐标平移
+      // 车站的上次付费选址（site）随坐标一起平移，否则迁移后的微调会被误算为搬迁
+      const sh = function (o) { if (o && typeof o.x === 'number') { o.x += dx; o.y += dy; } if (o && Array.isArray(o.site)) o.site = [o.site[0] + dx, o.site[1] + dy]; };
+      // 回放里的已拆除设施与现存线网一起迁移，日期和线路归属记录不变。
+      for (const net of [p.net, p.netGone]) if (net) {
+        for (const id in net.stations) sh(net.stations[id]);
+        for (const id in net.segments) { const s = net.segments[id]; if (s.pts) s.pts = s.pts.map(function (q) { return [q[0] + dx, q[1] + dy]; }); }
+      }
+      const ir = p.impactReport;
+      if (ir) for (const k of ['stations', 'hot', 'roads', 'roadsWorse']) for (const o of ir[k] || []) if (o && typeof o.x === 'number' && typeof o.y === 'number') { o.x += dx; o.y += dy; }
+      delete p.congRef;
+      // 考古调查按格号去重，发现的位置也跟随格网移动。
+      if (p.digs) p.digs = Object.fromEntries(Object.entries(p.digs).map(function ([key, value]) {
+        const cell = Number(key);
+        return [((cell / oW | 0) + dy) * W + cell % oW + dx, value];
+      }));
+      for (const find of p.finds || []) { find.x += dx; find.yy += dy; }
+      // 片区编号
+      const oZW = oW / ZN, nZW = W / ZN, zmap = function (z) { return ((z / oZW) | 0) * nZW + (z % oZW) + dx / ZN + (dy / ZN) * nZW; };
+      const shiftCool = function (key) {
+        return key.replace(/^at:(-?[\d.]+),(-?[\d.]+)$/, (s, x, y) => 'at:' + (+x + dx).toFixed(1) + ',' + (+y + dy).toFixed(1));
+      };
+      migrateZoneRefs(p, zmap, sh, shiftCool);
+      // 城市经济：载入后按新增范围调整统计口径（连续迁移时原范围随后续步骤平移）
+      if (p.macro) { const ar = p.macro.areaRebase; if (ar && ar.oldBox && from > from0) { ar.oldBox[0] += dx; ar.oldBox[1] += dy; } else p.macro.areaRebase = { from: from, oldBox: [dx, dy, oW, oH] }; }
+      const prevNote = p.mapUpgrade && from > from0 ? p.mapUpgrade.note : '';
+      p.mapUpgrade = { from: from0, to: m.mapVersion, at: [p.clock.y, p.clock.m, p.clock.d], note: (prevNote ? prevNote + '；' : '') + (spec.note || '') };
+    }
+  }
+  // 地图平移与小区细分共用存档里的小区引用。细分不移动格坐标或按坐标记录的冷却。
+  function migrateZoneRefs(p, zmap, move = () => {}, shiftCool = key => key) {
+    const taskKey = key => key.replace(/^(cong|cov):(\d+)$/, (_, kind, z) => kind + ':' + zmap(+z));
+    const fixTask = function (t) {
+      if (!t) return;
+      if (typeof t.zone === 'number') t.zone = zmap(t.zone);
+      if (typeof t.coolKey === 'string') t.coolKey = taskKey(t.coolKey);
+      (t.anchors || []).forEach(move);
+      move(t.spot);
+      (t.parts || []).forEach(fixTask);
+    };
+    const tasks = p.tasks || {};
+    for (const list of [tasks.active, tasks.done, tasks.failed, tasks.offers, tasks.adjusted]) (list || []).forEach(fixTask);
+    if (tasks.cool) tasks.cool = Object.fromEntries(Object.entries(tasks.cool).map(([key, until]) => [shiftCool(taskKey(key)), until]));
+    const corp = p.corp;
+    if (corp) {
+      for (const t of [].concat(corp.tenders || [], corp.contracts || [], corp.closed || [])) {
+        if (!t) continue;
+        move(t.area);
+        fixTask(t);
+      }
+      if (corp.cool) corp.cool = Object.fromEntries(Object.entries(corp.cool).map(([key, until]) => [
+        key.replace(/^z:(\d+)$/, (_, z) => 'z:' + zmap(+z)), until,
+      ]));
+    }
+    for (const reader of Object.values(p.voices?.follow || {})) for (const post of reader?.posts || []) {
+      if (Number.isInteger(post?.at?.zone)) post.at.zone = zmap(post.at.zone);
+    }
+    const people = p.folks?.list;
+    for (const person of Array.isArray(people) ? people : []) {
+      if (!person) continue;
+      for (const place of [person.home, person.dest, person.kid?.school]) {
+        if (!place) continue;
+        move(place);
+        if (Number.isInteger(place.z)) place.z = zmap(place.z);
+      }
+    }
+  }
+
+  function zoneMigration(m, specs) {
+    return function (p, from) {
+      const spec = specs.find(entry => entry.from === from);
+      if (!spec) throw new Error('不支持从第 ' + from + ' 版迁移');
+      const { W, H, ZONE } = m.cfg, oldZone = spec.oldZone, oldWidth = W / oldZone;
+      const oldCount = oldWidth * (H / oldZone), width = W / ZONE;
+      const zmap = function (z) {
+        if (!Number.isInteger(z) || z < 0 || z >= oldCount) return z;
+        const x = (z % oldWidth + 0.5) * oldZone, y = (Math.floor(z / oldWidth) + 0.5) * oldZone;
+        return Math.floor(y / ZONE) * width + Math.floor(x / ZONE);
+      };
+      migrateZoneRefs(p, zmap);
+      delete p.congRef;
+      p.mapUpgrade = { from, to: m.mapVersion, at: [p.clock.y, p.clock.m, p.clock.d], note: spec.note, zoneOnly: true };
+      return p;
+    };
+  }
+
+  // 声明了范围扩展（extent）的地图：旧版本存档按扩展规格迁移
+  for (const id in MAPS) if (MAPS[id].extent && !MAPS[id].migrate) MAPS[id].migrate = CM.extentMigration(MAPS[id].extent);
+  for (const m of Object.values(MAPS)) if (m.zoneChange && !m.migrate) m.migrate = zoneMigration(m, m.zoneChange);
+  // 杭州、武汉：第 2→3 版只调整了展示（格网、区域编号与玩家线网不变），第 2 版存档按第 3 版继续迁移；
+  // v2.2 起第 3→4 版向外扩大（萧山机场、天河机场，见各自的 extent）
+  for (const id of ['hz','wh']) {
+    const mp=MAPS[id],steps=mp.migrate;
+    mp.migrate=function(payload,from){
+      if(from<1||from>=mp.mapVersion)throw new Error('不支持的地图数据版本');
+      return steps(payload,from===2?3:from);
+    };
+  }
+  CM.MAPS = MAPS;
+  // 选择列表由易到难；同难度保留既有城市顺序，新地图按登记顺序接在同档末尾。
+  const mapOrder = ['tutorial', 'gz', 'hz', 'wx', 'hk', 'tp', 'tk'];
+  for (const id of Object.keys(MAPS)) if (mapOrder.indexOf(id) < 0) mapOrder.push(id);
+  const mapRank = new Map(mapOrder.map(function (id, i) { return [id, i]; }));
+  CM.MAP_ORDER = mapOrder.filter(function (id) { return MAPS[id]; }).sort(function (a, b) {
+    return (MAPS[a].difficulty || 2) - (MAPS[b].difficulty || 2) || mapRank.get(a) - mapRank.get(b);
+  });
+  // ---------------- 地理数据按需载入（v2.7.1 内存） ----------------
+  // 开始界面背景（广州）的地理数据随页面载入；其他地图启动时只有索引（js/geo-index.js：投影、地名、名称表、要素数量），
+  // 水系、道路、铁路、绿地等完整数据在进入该地图（开局、读档）或画缩略图时由 loadGeo 载入，补进同一个对象（各处持有的引用不变）。
+  // 离开该地图、缩略图画完后由 releaseGeo 释放；地面块线程自行载入同一文件。避免全部城市同时常驻内存
+  const GEO_HEAVY = ['water', 'roads', 'streets', 'rail', 'parks', 'reserves', 'woods', 'admin'], geoLoads = {}, geoHold = {};
+  const GEO_LOAD_TIMEOUT = 60000;
+  const isHttp = typeof location !== 'undefined' && /^https?:$/.test(location.protocol);
+  let geoRetrySerial = 0;
+  // 正常请求按资源内容使用固定地址。失败后请求新地址，避免反复命中旧缓存。
+  CM.geoAssetPath = function (geo, retry) {
+    if (!isHttp) return geo.file;
+    const params = new URLSearchParams();
+    if (geo.integrity) params.set('v', geo.integrity.slice('sha256-'.length));
+    if (retry) params.set('retry', Date.now().toString(36) + '-' + (++geoRetrySerial).toString(36));
+    const query = params.toString();
+    return query ? geo.file + '?' + query : geo.file;
+  };
+  CM.geoReady = function (id) { const m = MAPS[id]; return !!(m && m.geo && (!m.geo.file || m.geo.water)); };
+  function requestGeo(m, retry) {
+    const stub = m.geo;
+    return new Promise(function (resolve) {
+      const script = document.createElement('script');
+      let settled = false;
+      const finish = function (full) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        script.remove();
+        resolve(full);
+      };
+      const timer = setTimeout(function () { finish(null); }, GEO_LOAD_TIMEOUT);
+      script.onload = function () {
+        const full = CM.GEOS[m.id];
+        CM.GEOS[m.id] = stub;   // 超时后的迟到脚本也只恢复原引用，不能替换当前数据。
+        const valid = full !== stub && Array.isArray(full?.water) && Array.isArray(full.roads) &&
+          (!stub.count || (full.water.length === stub.count.water && full.roads.length === stub.count.roads));
+        finish(valid ? full : null);
+      };
+      script.onerror = function () { finish(null); };
+      if (isHttp && stub.integrity) script.integrity = stub.integrity;
+      script.src = CM.geoAssetPath(stub, retry);
+      document.head.appendChild(script);
+    });
+  }
+  CM.loadGeo = function (id) {
+    const m = MAPS[id];
+    if (!m || CM.geoReady(id)) return Promise.resolve(m || null);
+    if (!geoLoads[id]) geoLoads[id] = (async function () {
+      let full = await requestGeo(m, false);
+      if (!full) {
+        await new Promise(function (resolve) { setTimeout(resolve, 400); });
+        full = await requestGeo(m, true);
+      }
+      if (!full) {
+        const error = new Error('地图数据载入失败：' + (m.data.city || id));
+        error.code = 'GEO_LOAD'; error.file = m.geo.file;
+        throw error;
+      }
+      for (const key of GEO_HEAVY) m.geo[key] = full[key];
+      return m;
+    })().finally(function () { delete geoLoads[id]; });
+    return geoLoads[id];
+  };
+  // 占用期间（缩略图绘制中）不释放；当前地图与正在进行的进度所在地图始终保留（载入别的存档失败时要切回）
+  CM.holdGeo = function (id) {
+    geoHold[id] = (geoHold[id] || 0) + 1;
+    return CM.loadGeo(id).catch(function (e) { CM.unholdGeo(id); throw e; });
+  };
+  CM.unholdGeo = function (id) { geoHold[id] = Math.max(0, (geoHold[id] || 0) - 1); CM.releaseGeo(id); };
+  CM.releaseGeo = function (id) {
+    const m = MAPS[id], G = m && m.geo;
+    if (!G || !G.file || !G.water || id === CM.mapId || geoHold[id] > 0 || (CM.game && CM.game.mapId === id)) return;
+    for (const k of GEO_HEAVY) delete G[k];
+    if (CM.Geo && CM.Geo.forget) CM.Geo.forget(G);   // 已解码的几何同样释放
+  };
+  // 进入新进度、回到主菜单时释放其余地图（main.js）
+  CM.releaseGeos = function () { for (const id in MAPS) CM.releaseGeo(id); };
+  CM.mapId = 'gz';
+  CM.useMap = function (id) {
+    const m = MAPS[id] || MAPS.gz;
+    if (CM.mapId === m.id && CM.GEO === m.geo) return m;
+    if (!CM.geoReady(m.id)) throw new Error('地图数据尚未载入：' + m.name);
+    CM.mapId = m.id;
+    for (const k of Object.keys(CM.DATA)) delete CM.DATA[k];
+    Object.assign(CM.DATA, m.data);
+    CM.GEO = m.geo;
+    for (const k of CFG_KEYS) CFG[k] = k === 'START' ? Object.assign({}, m.cfg.START) : m.cfg[k];
+    if (CM.Geo) CM.Geo.init();
+    if (CM.Metro && CM.Metro.clearCaches) CM.Metro.clearCaches();
+    return m;
+  };
+  CM.curMap = function () { return MAPS[CM.mapId] || MAPS.gz; };
+  // 货币时期：cfg.money.eras = [{ from: [年, 月], unit, wan, yi, sym, code, div }, …]（div 为每 1 显示单位折合的内部记账单位）。
+  // 内部金额（资金、债务、票价、造价、账本）始终使用开局货币记账，不因货币改革改写；显示、票价滑块与图表按当期货币折算
+  CM.moneyAt = function (mp, y, m) {
+    const base = mp.cfg.money; if (!base || !base.eras) return base;
+    let cur = base; const ym = U.ymIndex(y, m || 1);
+    for (const e of base.eras) if (ym >= U.ymIndex(e.from[0], e.from[1] || 1)) cur = e;
+    if (cur === base) return base;
+    return Object.assign({}, base, cur, { eras: base.eras, baseUnit: base.unit });
+  };
+  CM.applyMoneyEra = function (y, m) {
+    const mo = CM.moneyAt(CM.curMap(), y, m), prev = CFG.money;
+    CFG.money = mo;
+    return !prev || prev.code !== mo.code || (prev.div || 1) !== (mo.div || 1);
+  };
+  // 票价滑块范围（当前显示货币）：fareRange.scale 时按本城造价指数随年代放大（长时间跨度、物价变化大的地图），再按货币时期折算，步长取整到 1-2-5
+  const nice = function (v) { const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; };
+  CM.fareRangeNow = function (g) {
+    const R = CFG.fareRange, div = (CFG.money && CFG.money.div) || 1;
+    if (!R.scale || !g) return div === 1 ? R : { min: R.min / div, max: R.max / div, step: R.step / div };
+    const k = g.econ.costIndex(g.clock.y) / div, step = nice(R.step * k);
+    return { min: 0, max: Math.max(step * 4, Math.round(R.max * k / step) * step), step: step };
+  };
+
+  // 地图缩略图：水系、主要道路与铁路（不切换当前地图，直接解码该地图的数据），按主题配色，结果缓存。
+  // v2.4：以前打开选择地图时逐张同步画图并编码（每张数十至数百毫秒，打开列表明显卡一下）。现在画图分成小段（生成器，每段几毫秒），
+  // 编码交给 toBlob 在后台完成；主菜单空闲时预先生成，选图列表拿到就显示
+  const thumbs = {}, pend = {};
+  const drawThumb = function* (id, theme, hd) {
+    const m = MAPS[id];
+    const G = m.geo, dec = CM.Geo.dec, Wc = m.cfg.W, Hc = m.cfg.H;
+    const S = hd ? Math.min(1800 / Wc, 1200 / Hc) : Math.min(640 / Wc, 400 / Hc), cv = document.createElement('canvas');
+    cv.width = Math.round(Wc * S); cv.height = Math.round(Hc * S);
+    // CPU 位图（之后要编码成图片）；分段之间先提交已记录的绘制命令（同 render.js 的 flushCanvas：跨帧分段绘制时 Chromium 可能丢掉整段命令）
+    const c = cv.getContext('2d', { willReadFrequently: true }), dark = theme === 'dark', sync = function () { c.getImageData(0, 0, 1, 1); };
+    c.fillStyle = dark ? '#1b2533' : '#eef3f0'; c.fillRect(0, 0, cv.width, cv.height);
+    c.setTransform(S, 0, 0, S, 0, 0);
+    let n = 0;
+    const poly = function* (rows, col) {
+      c.fillStyle = col; c.beginPath();
+      for (const row of rows) { for (let k = 1; k < row.length; k++) { if (typeof row[k] !== 'string') continue; const p = CM.Geo.orient(dec(row[k], 1), row[k][0] === 'o'); c.moveTo(p[0], p[1]); for (let q = 2; q < p.length; q += 2) c.lineTo(p[q], p[q + 1]); } if (++n % 150 === 0) { sync(); yield; } }
+      c.fill('nonzero');   // 环方向已统一（geo.js orient），重叠的水面、林地叠加而不抵消
+    };
+    const line = function (p) { c.beginPath(); c.moveTo(p[0], p[1]); for (let q = 2; q < p.length; q += 2) c.lineTo(p[q], p[q + 1]); c.stroke(); };
+    yield* poly(G.woods || [], dark ? '#22362f' : '#dbe9dc');
+    yield* poly(G.reserves || [], dark ? '#2a4238' : '#c9dfcc');
+    yield* poly(G.parks || [], dark ? '#264034' : '#cfe6cf');
+    yield* poly((G.water || []).filter(function (r) { return typeof r[1] !== 'number'; }), dark ? '#2b4f78' : '#a9cdeb');
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const r of G.water || []) if (typeof r[1] === 'number') { c.strokeStyle = dark ? '#2b4f78' : '#a9cdeb'; c.lineWidth = Math.max(r[1], 0.25); line(dec(r[2])); if (++n % 150 === 0) { sync(); yield; } }
+    for (const r of G.rail || []) { if (r[1] & 2) continue; c.strokeStyle = dark ? '#5b6676' : '#9aa3ae'; c.lineWidth = 0.18; line(dec(r[2])); if (++n % 150 === 0) { sync(); yield; } }
+    for (const cls of hd ? [2, 3, 4] : [3, 4]) for (const r of G.roads || []) {
+      if (r[1] !== cls || (r[2] & 6)) continue;
+      c.strokeStyle = dark ? (cls === 4 ? '#b8964a' : cls === 3 ? '#6f7b8c' : '#4f5a68') : (cls === 4 ? '#f0b54a' : cls === 3 ? '#c4ccd6' : '#d6dce3'); c.lineWidth = cls === 4 ? 0.45 : cls === 3 ? 0.3 : 0.2;
+      line(dec(r[3])); if (++n % 150 === 0) { sync(); yield; }
+    }
+    sync();
+    return cv;
+  };
+  const finish = function (it) { let r = it.next(); while (!r.done) r = it.next(); return r.value; };
+  // 同步取得（必须马上有图时；有缓存直接返回）
+  CM.mapThumb = function (id, theme) {
+    const key = id + ':' + theme;
+    if (thumbs[key]) return thumbs[key];
+    if (!MAPS[id]) return null;
+    if (!CM.geoReady(id)) { CM.mapThumbAsync(id, theme); return null; }
+    thumbs[key] = finish(drawThumb(id, theme)).toDataURL('image/jpeg', 0.9);
+    return thumbs[key];
+  };
+  CM.mapThumbReady = function (id, theme, hd) { return thumbs[id + ':' + theme + (hd ? ':hd' : '')] || null; };
+  // 后台生成：空闲时分段画图，toBlob 编码，结果为对象 URL
+  const idle = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 400 }); } : function (f) { setTimeout(function () { f({ timeRemaining: function () { return 6; } }); }, 16); };
+  // 画图（不编码）：结果是画布，世界地图可以直接画上去，不必等编码与解码。每段至少做几毫秒——画面持续动画、
+  // 空闲回调只能超时触发时（剩余时间为 0）也照常推进（v2.4 以前此时每 0.4 秒才画一小段，城市画面要等好几秒）
+  const drawn = {}, pendDraw = {};
+  let thumbQueue = Promise.resolve();
+  CM.mapThumbDraw = function (id, theme, hd) {
+    const key = id + ':' + theme + (hd ? ':hd' : '');
+    if (drawn[key]) return Promise.resolve(drawn[key]);
+    if (pendDraw[key]) return pendDraw[key];
+    if (!MAPS[id]) return Promise.resolve(null);
+    // 画图期间占用该地图的地理数据（未载入时先载入），画完释放（当前地图除外）；载入失败时没有缩略图
+    const draw = thumbQueue.then(function () { return CM.holdGeo(id); }).then(function () {
+      const it = drawThumb(id, theme, hd);
+      return new Promise(function (res) {
+        const step = function (dl) {
+          let r;
+          try {
+            const t0 = performance.now(), budget = dl.didTimeout ? 8 : Math.max(4, dl.timeRemaining() - 1);
+            r = it.next();
+            while (!r.done && performance.now() - t0 < budget) r = it.next();
+          } catch (e) { console.error(e); CM.unholdGeo(id); delete pendDraw[key]; res(null); return; }
+          if (!r.done) { idle(step); return; }
+          CM.unholdGeo(id);
+          drawn[key] = r.value; delete pendDraw[key]; res(r.value);
+        };
+        idle(step);
+      });
+    }, function () { delete pendDraw[key]; return null; });
+    thumbQueue = pendDraw[key] = draw;
+    return draw;
+  };
+  CM.mapThumbAsync = function (id, theme, hd) {
+    const key = id + ':' + theme + (hd ? ':hd' : '');
+    if (thumbs[key]) return Promise.resolve(thumbs[key]);
+    if (pend[key]) return pend[key];
+    if (!MAPS[id]) return Promise.resolve(null);
+    return (pend[key] = CM.mapThumbDraw(id, theme, hd).then(function (cv) {
+      if (!cv) { delete pend[key]; return null; }
+      return new Promise(function (res) {
+        // 编码完成后画布不再保留（对象 URL 足够；世界地图打开期间自己持有画布）
+        const done = function (url) { thumbs[key] = url; delete pend[key]; delete drawn[key]; res(url); };
+        if (cv.toBlob) cv.toBlob(function (b) { done(b ? URL.createObjectURL(b) : cv.toDataURL('image/jpeg', 0.9)); }, 'image/jpeg', 0.9);
+        else done(cv.toDataURL('image/jpeg', 0.9));
+      });
+    }));
+  };
+  // 图片元素先空着，缩略图就绪后淡入（列表、城市海报、简报共用）
+  CM.thumbInto = function (img, id, theme) {
+    const u = CM.mapThumbReady(id, theme);
+    if (u) { img.src = u; return img; }
+    img.classList.add('thumb-wait');
+    CM.mapThumbAsync(id, theme).then(function (url) { if (url) { img.src = url; img.classList.remove('thumb-wait'); } });
+    return img;
+  };
+  // 主菜单只预绘默认地图和教程，其他缩略图打开选图页时生成。
+  CM.prewarmThumbs = function (theme) {
+    const ids = ['gz', 'tutorial']; let i = 0;
+    const next = function () { if (i < ids.length) CM.mapThumbAsync(ids[i++], theme).then(next); };
+    next();
+  };
+})(window.CM);
