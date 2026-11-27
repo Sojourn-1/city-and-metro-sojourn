@@ -4895,25 +4895,20 @@
   // 建站 / 绘线工具下与「区域」图层中，用很淡的填充加一圈细边标出这片范围（只含风景区内、非水面的部分）
   const SCENIC_RAD = 2.4, SCENIC_RES = 18, SCENIC_ARC = 180;
   Renderer.prototype.scenicZones = function () {
-    const g = this.game, city = g.city, Fac = CM.Fac;
+    const g = this.game, city = g.city, Fac = CM.Fac, D = CM.DATA;
     if (!Fac || !city.regions.some(function (r) { return r.scenic; })) return null;
     const yr = city.terrainYear || CFG.START.y;
     const key = (city.uid || 0) + ':' + (city.terrainVer || 0) + ':' + Math.floor(yr * 12) + ':' + this.themeName;
     if (this._scz && this._scz.key === key) return this._scz.list;
     const list = [], night = TH.night;
-    const fillC = night ? [128, 214, 160] : [38, 132, 84];
     const ok = function (x, y) { const c = city.cellAt(x, y); return c >= 0 && city.regions[city.region[c]].scenic && city.waterDistAt(x, y) >= 0.05; };
-    for (const f of Fac.list()) {
-      if (f.T.hub || f.ext) continue;
-      const c0 = city.cellAt(f.x, f.y);
-      if (c0 < 0 || !city.regions[city.region[c0]].scenic || !Fac.active(f, yr, city)) continue;
-      const n = Math.ceil(SCENIC_RAD * 2 * SCENIC_RES), x0 = f.x - SCENIC_RAD, y0 = f.y - SCENIC_RAD;
+    const mk = function (fx, fy, rad, label) {
+      const res = SCENIC_RES, n = Math.ceil(rad * 2 * res), x0 = fx - rad, y0 = fy - rad;
       const inside = new Float32Array(n * n);
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-        const x = x0 + (i + 0.5) / SCENIC_RES, y = y0 + (j + 0.5) / SCENIC_RES;
-        if (U.dist(x, y, f.x, f.y) <= SCENIC_RAD && ok(x, y)) inside[j * n + i] = 1;
+        const x = x0 + (i + 0.5) / res, y = y0 + (j + 0.5) / res;
+        if (U.dist(x, y, fx, fy) <= rad && ok(x, y)) inside[j * n + i] = 1;
       }
-      // 两遍可分离的方框模糊（半径 3 格）让区域边缘羽化
       const blur = function (src) {
         const tmp = new Float32Array(n * n), out = new Float32Array(n * n), R = 3, w = 2 * R + 1;
         for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { let s = 0; for (let k = -R; k <= R; k++) { const ii = i + k; if (ii >= 0 && ii < n) s += src[j * n + ii]; } tmp[j * n + i] = s / w; }
@@ -4921,21 +4916,35 @@
         return out;
       };
       const soft = blur(inside);
+      const fillC = night ? [128, 214, 160] : [38, 132, 84];
       const cv = makeCanvas(n, n), x = cv.getContext('2d'), img = x.createImageData(n, n), d = img.data;
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
         const k = j * n + i, m = soft[k] * inside[k]; if (m <= 0) continue;
-        const r = U.dist(x0 + (i + 0.5) / SCENIC_RES, y0 + (j + 0.5) / SCENIC_RES, f.x, f.y) / SCENIC_RAD;
+        const r = U.dist(x0 + (i + 0.5) / res, y0 + (j + 0.5) / res, fx, fy) / rad;
         d[k * 4] = fillC[0]; d[k * 4 + 1] = fillC[1]; d[k * 4 + 2] = fillC[2]; d[k * 4 + 3] = Math.round(m * (night ? 60 : 46) * (0.55 + 0.45 * (1 - r * r)));
       }
       x.putImageData(img, 0, 0);
-      // 圆周上落在风景区内的弧段（相邻两点都在区内才连线）
       const arcs = []; let run = null;
       for (let k = 0; k <= SCENIC_ARC; k++) {
-        const a = k / SCENIC_ARC * Math.PI * 2, px = f.x + Math.cos(a) * SCENIC_RAD * 0.985, py = f.y + Math.sin(a) * SCENIC_RAD * 0.985;
+        const a = k / SCENIC_ARC * Math.PI * 2, px = fx + Math.cos(a) * rad * 0.985, py = fy + Math.sin(a) * rad * 0.985;
         if (ok(px, py)) { if (!run) { run = []; arcs.push(run); } run.push(a); } else run = null;
       }
       if (arcs.length > 1 && arcs[0][0] === 0 && arcs[arcs.length - 1][arcs[arcs.length - 1].length - 1] >= Math.PI * 2 - 1e-6) arcs[0] = arcs.pop().concat(arcs[0].map(function (a) { return a + Math.PI * 2; }));
-      list.push({ f: f, cv: cv, x0: x0, y0: y0, n: n, arcs: arcs.filter(function (r) { return r.length > 1; }), ink: U.rgb(fillC, 0.95), fillC: fillC });
+      return { f: { x: fx, y: fy }, cv: cv, x0: x0, y0: y0, n: n, rad: rad, arcs: arcs.filter(function (r) { return r.length > 1; }), ink: U.rgb(fillC, 0.95), fillC: fillC, label: label };
+    };
+    // 运营中的景点：周边 600 m 可建地下景区站（noGate / noScenicGate 的保护区除外）
+    for (const f of Fac.list()) {
+      if (f.T.hub || f.ext || f.noGate) continue;
+      const c0 = city.cellAt(f.x, f.y);
+      if (c0 < 0) continue;
+      const rg = city.regions[city.region[c0]];
+      if (!rg.scenic || rg.noScenicGate || !Fac.active(f, yr, city)) continue;
+      list.push(mk(f.x, f.y, SCENIC_RAD, CM.Fac.shortName(f) + ' · 景区站可建范围'));
+    }
+    // 数据里指定的特批可建站圆（如灵山大佛 200 m）
+    for (const q of (D && D.stationAllow) || []) {
+      if (!q || !q.at) continue;
+      list.push(mk(q.at[0], q.at[1], (q.r || 0) / CFG.CELL_M, (q.name || '景区') + ' · 可建站范围 ' + Math.round(q.r || 0) + ' m'));
     }
     this._scz = { key: key, list: list };
     return list;
@@ -4992,7 +5001,7 @@
     ctx.globalAlpha = this._sczA * (1 - 2 * under);
     ctx.imageSmoothingEnabled = true;
     for (const it of list) {
-      if (it.x0 > v.x1 || it.y0 > v.y1 || it.x0 + SCENIC_RAD * 2 < v.x0 || it.y0 + SCENIC_RAD * 2 < v.y0) continue;
+      if (it.x0 > v.x1 || it.y0 > v.y1 || it.x0 + it.rad * 2 < v.x0 || it.y0 + it.rad * 2 < v.y0) continue;
       {
         ctx.save();
         ctx.transform(M[0] * z, M[2] * z, M[1] * z, M[3] * z, this.ox, this.oy);
@@ -5003,14 +5012,14 @@
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       for (const run of it.arcs) {
         ctx.beginPath();
-        for (let k = 0; k < run.length; k++) { const a = run[k], p = this.P(it.f.x + Math.cos(a) * SCENIC_RAD, it.f.y + Math.sin(a) * SCENIC_RAD, 0, {}); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }
+        for (let k = 0; k < run.length; k++) { const a = run[k], p = this.P(it.f.x + Math.cos(a) * it.rad, it.f.y + Math.sin(a) * it.rad, 0, {}); if (k) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y); }
         ctx.setLineDash([]); ctx.strokeStyle = TH.halo; ctx.globalAlpha = this._sczA * (1 - 2 * under) * 0.6; ctx.lineWidth = 4; ctx.stroke();
         ctx.setLineDash([1, 6]); ctx.strokeStyle = U.rgb(it.fillC, 0.9); ctx.globalAlpha = this._sczA * (1 - 2 * under); ctx.lineWidth = 2.6; ctx.stroke();
       }
       ctx.setLineDash([]);
       if (z >= 10) {
         // 名称标签放在范围下沿（避开地标名称），浅色圆角底
-        const p = this.P(it.f.x, it.f.y + SCENIC_RAD, 0, {}), text = CM.Fac.shortName(it.f) + ' · 景区站可建范围';
+        const p = this.P(it.f.x, it.f.y + it.rad, 0, {}), text = it.label;
         ctx.font = TYPE.meta; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const tw = ctx.measureText(text).width + 16, ty = p.y + 13;
         ctx.beginPath(); ctx.roundRect(p.x - tw / 2, ty - 10, tw, 20, 10);
