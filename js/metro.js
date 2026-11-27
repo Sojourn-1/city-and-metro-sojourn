@@ -1163,9 +1163,11 @@
     const yr = city.terrainYear || CFG.START.y;
     let best = null, bd = 2.4;
     for (const f of Fac.list()) {
-      if (f.T.hub || f.ext) continue;
+      if (f.T.hub || f.ext || f.noGate) continue;   // noGate：该景点不开放 600 m「景区站」豁免（如灵山只保留数据里指定的圆形范围）
       const d = U.dist(x, y, f.x, f.y); if (d > bd) continue;
-      const c = city.cellAt(f.x, f.y); if (c < 0 || !city.regions[city.region[c]].scenic) continue;
+      const c = city.cellAt(f.x, f.y); if (c < 0) continue;
+      const rgF = city.regions[city.region[c]];
+      if (!rgF.scenic || rgF.noScenicGate) continue;   // noScenicGate：该保护区不支持「景点 600 m 景区站」豁免
       if (!Fac.active(f, yr, city)) continue;
       best = f; bd = d;
     }

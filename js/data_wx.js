@@ -103,7 +103,7 @@
     regions: [
       // 风景区：锡惠与马山不能开发
       { id: 'xihui', name: '锡惠风景区（惠山·锡山）', scenic: true, open: null, poly: xihui, relief: 120, lockNote: '锡惠公园与惠山森林公园，只能地下穿过，不能设站开发' },
-      { id: 'mashan', name: '马山（灵山）', scenic: true, open: null, poly: mashan, relief: 200, lockNote: '马山半岛与灵山景区，只保留风景与宗教用地，不能开发' },
+      { id: 'mashan', name: '马山（灵山）', scenic: true, noScenicGate: true, open: null, poly: mashan, relief: 200, lockNote: '马山半岛与灵山景区，只保留风景与宗教用地，不能开发' },
       // 硕放机场：照常运营，用地不开发，范围内只能地下设站与地下穿越
       { id: 'airport', name: '苏南硕放国际机场', poly: poly([[31.4680, 120.4050], [31.4680, 120.4570], [31.5160, 120.4570], [31.5160, 120.4050]]), open: null, hub: true, empty: true, lockNote: '民用机场照常运营，用地不开发', note: '2004 年开通民航；重要交通枢纽：范围内可以地下设站与地下穿越' },
       // 老城：梁溪区（2010 年时为崇安、南长、北塘三区）
@@ -261,7 +261,7 @@
       { id: 'wx_xq_cbd', n: '无锡新区商务区', t: 'cbd', at: ll(31.5420, 120.3680), y0: 2005, w: [[2005, 0.004], [2015, 0.018], [2030, 0.025]] },
       { id: 'wx_lihu_cbd', n: '蠡湖新城商务区', t: 'cbd', at: ll(31.5250, 120.2520), y0: 2008, w: [[2008, 0.002], [2018, 0.012]] },
       { id: 'wx_yuantouzhu_f', n: '鼋头渚', t: 'scenic', lm: 'wx_yuantouzhu', tour: true, w: 0.03 },
-      { id: 'wx_lingshan_s', n: '灵山大佛', t: 'scenic', lm: 'wx_lingshan', tour: true, w: 0.022 },
+      { id: 'wx_lingshan_s', n: '灵山大佛', t: 'scenic', lm: 'wx_lingshan', tour: true, noGate: true, w: 0.022 },
       { id: 'wx_huishan_s', n: '惠山古镇', t: 'scenic', lm: 'wx_huishan', y0: [2008, 1], tour: true, w: [[2008, 0.008], [2015, 0.018]] },
       { id: 'wx_nanchansi_s', n: '南禅寺', t: 'scenic', lm: 'wx_nanchansi', tour: true, w: 0.012 },
       { id: 'wx_xihui_p', n: '锡惠公园', t: 'park', at: ll(31.5795, 120.2663), w: 0.02 },
